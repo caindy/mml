@@ -4,10 +4,10 @@ import pandas as pd
 from requests.sessions import HTTPAdapter
 import numpy as np
 from io import StringIO
-from time import time
+
 from urllib3.util.retry import Retry
 from datetime import datetime, date
-from joblib import Parallel, delayed
+from time import time
 
 retries = Retry(total=5, backoff_factor=0.1,
                 status_forcelist=[500, 502, 503, 504])
@@ -47,36 +47,64 @@ def get_station_data(id: str, start: datetime, end: datetime, s : Session):
     else:
         print(f'Request for {id} in failed: {response.status_code} {response.reason}')
 
+def get_station_df(sid : str, s : Session):
+    station = get_station_data(sid, datetime(2014,12,19), date.today(), s)
+    if station is None:
+        return None
+
+    station['feel'] = np.where(station['feel'] == 'M', station['tmpf'], station['feel'])
+    station['valid'] = pd.to_datetime(station['valid'], utc = True)
+    numeric_cols = ['tmpf', 'lat', 'lon', 'feel']
+    station[numeric_cols] = station[numeric_cols].apply(pd.to_numeric, errors='coerce', axis=1)
+
+    # interpolate only within station temporally (sorted by timestamp 'valid')
+    #station['tmpf'] = station['tmpf'].interpolate()
+    return station
+
 def write_station_df(sid : str, s : Session):
     file_name = f'data/weather/{state}_{sid}_weather_data.parquet'
     if os.path.isfile(file_name):
         print(f'{file_name} already exists')
         return ''
 
-    station = get_station_data(sid, datetime(2014,12,19), date.today(), s)
+    start = time()
+    station = get_station_df(sid, s)
     if station is None:
         print(f'Retrieve {sid} failed')
-        return ''
-
-    start = time()
-    station['feel'] = np.where(station['feel'] == 'M', station['tmpf'], station['feel'])
-    station['valid'] = pd.to_datetime(station['valid'], utc = True)
-    numeric_cols = ['tmpf', 'lat', 'lon', 'feel']
-    station[numeric_cols] = station[numeric_cols].apply(pd.to_numeric, errors='coerce', axis=1)
-    # interpolate only within station temporally (sorted by timestamp 'valid')
-    #station['tmpf'] = station['tmpf'].interpolate()
-    print(f'Completed {state} {sid} in {time() - start} seconds')
-    station.to_parquet(file_name)
-    return file_name
+    else:
+        print(f'Completed {state} {sid} in {time() - start} seconds')
+        station.to_parquet(file_name)
+        return file_name
 
 
 states = ['ND', 'SD', 'MN', 'IA', 'AR', 'IN', 'IL', 'NE', 'KS', 'MO', 'WI', 'KY', 'LA', 'AR', 'MS']
 # additional states to consider: East TX,OH
 
+# with Session() as s:
+#     s.mount('http://', HTTPAdapter(max_retries=retries))
+#     for state in states:
+#         state_df = pd.DataFrame()
+#         stations = get_station_ids(state, 2014, s)
+#         Parallel(n_jobs=4, prefer="threads")(delayed(write_station_df)(sid, s) for sid in stations) 
+            
+
 with Session() as s:
     s.mount('http://', HTTPAdapter(max_retries=retries))
-    for state in states:
-        state_df = pd.DataFrame()
-        stations = get_station_ids(state, 2014, s)
-        Parallel(n_jobs=4, prefer="threads")(delayed(write_station_df)(sid, s) for sid in stations) 
-            
+    df = pd.DataFrame()
+    IA = ['CBF', 'IKV', 'CWI', 'VTI']
+    MN = ['DLH', 'JKJ', 'LYV', 'MSP', 'RST']
+    WI = ['MSN', 'MKE', 'EAU', 'GRB ']
+    MI = ['ANJ', 'GRR', 'LAN', 'DET', 'ARB']
+    IN = ['EVV', 'FWA', 'GYY', 'IND', 'SBN', 'SPI']
+    IL = ['BMI', 'CMI', 'ARR', 'PIA']
+    MO = ['STL', 'COU', 'SGF', 'MKC']
+    MS = ['HKS', 'MJD', 'TUP', 'MEI']
+    LA = ['BTR', 'LFT', 'LCH', 'SHV', 'AEX']
+    TX = ['LFK']
+
+    stations = IA + MN + WI + MI + IN + IL + MO + MS + LA + TX
+    stations_df = pd.DataFrame()
+    stations_df = stations_df.append([get_station_df(sid, s) for sid in stations])
+    stations_df.to_parquet('subset_stations.parquet')
+
+
