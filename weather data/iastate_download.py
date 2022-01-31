@@ -35,46 +35,37 @@ def get_station_data(id: str, start: datetime, end: datetime, s : Session):
     data_query = 'data=tmpf&data=feel'
     date_query = f'year1={start.year}&month1={start.month}&day1={start.day}&year2={end.year}&month2={end.month}&day2={end.day}'
     query = f'?{data_query}&tz=Etc/UTC&format=comma&latlon=yes&{date_query}'
-    response = s.get(f'{asos_url}{query}&station={id}')
+    url = f'{asos_url}{query}&station={id}'
+    response = s.get(url)
     if response.ok:
+        print(f'Length of response: {len(response.content)}')
         csv = response.content.decode('utf-8')
+        print(f'Length of decoded response: {len(csv)}')
         df = pd.read_csv(StringIO(csv), skiprows = 5)
         print(f'Retrieved {df.size} observations for {id}')
         if df.size > 0:
             return df[['station', 'valid', 'tmpf', 'lat', 'lon', 'feel']]
         else:
+            print(f'URL {url}')
+            print(csv)
             return None
     else:
         print(f'Request for {id} in failed: {response.status_code} {response.reason}')
 
-def get_station_df(sid : str, s : Session):
-    station = get_station_data(sid, datetime(2014,12,19), date.today(), s)
+def get_station_df(sid : str, s : Session, start = datetime(2015,1,20)):
+    station = get_station_data(sid, start, date.today(), s)
     if station is None:
         return None
 
-    station['feel'] = np.where(station['feel'] == 'M', station['tmpf'], station['feel'])
     station['valid'] = pd.to_datetime(station['valid'], utc = True)
-    numeric_cols = ['tmpf', 'lat', 'lon', 'feel']
-    station[numeric_cols] = station[numeric_cols].apply(pd.to_numeric, errors='coerce', axis=1)
+    station = station[station['tmpf'] != 'M']
+    numeric_cols = ['tmpf', 'lat', 'lon']
+    station[numeric_cols] = station[numeric_cols].apply(pd.to_numeric, axis=1)
 
-    # interpolate only within station temporally (sorted by timestamp 'valid')
-    #station['tmpf'] = station['tmpf'].interpolate()
+    station['feel'] = np.where(station['feel'] == 'M', station['tmpf'], station['feel'])
+    station['feel'] = station[['feel']].apply(pd.to_numeric, axis=1)
+
     return station
-
-def write_station_df(sid : str, s : Session):
-    file_name = f'data/weather/{state}_{sid}_weather_data.parquet'
-    if os.path.isfile(file_name):
-        print(f'{file_name} already exists')
-        return ''
-
-    start = time()
-    station = get_station_df(sid, s)
-    if station is None:
-        print(f'Retrieve {sid} failed')
-    else:
-        print(f'Completed {state} {sid} in {time() - start} seconds')
-        station.to_parquet(file_name)
-        return file_name
 
 
 states = ['ND', 'SD', 'MN', 'IA', 'AR', 'IN', 'IL', 'NE', 'KS', 'MO', 'WI', 'KY', 'LA', 'AR', 'MS']
@@ -87,24 +78,26 @@ states = ['ND', 'SD', 'MN', 'IA', 'AR', 'IN', 'IL', 'NE', 'KS', 'MO', 'WI', 'KY'
 #         stations = get_station_ids(state, 2014, s)
 #         Parallel(n_jobs=4, prefer="threads")(delayed(write_station_df)(sid, s) for sid in stations) 
             
-
-with Session() as s:
+def get_session(protocol = 'http://'):
+    s = Session()
     s.mount('http://', HTTPAdapter(max_retries=retries))
-    df = pd.DataFrame()
-    IA = ['CBF', 'IKV', 'CWI', 'VTI']
-    MN = ['DLH', 'JKJ', 'LYV', 'MSP', 'RST']
-    WI = ['MSN', 'MKE', 'EAU', 'GRB ']
-    MI = ['ANJ', 'GRR', 'LAN', 'DET', 'ARB']
-    IN = ['EVV', 'FWA', 'GYY', 'IND', 'SBN', 'SPI']
-    IL = ['BMI', 'CMI', 'ARR', 'PIA']
-    MO = ['STL', 'COU', 'SGF', 'MKC']
-    MS = ['HKS', 'MJD', 'TUP', 'MEI']
-    LA = ['BTR', 'LFT', 'LCH', 'SHV', 'AEX']
-    TX = ['LFK']
+    return s
+    
 
-    stations = IA + MN + WI + MI + IN + IL + MO + MS + LA + TX
-    stations_df = pd.DataFrame()
-    stations_df = stations_df.append([get_station_df(sid, s) for sid in stations])
-    stations_df.to_parquet('subset_stations.parquet')
+# #    df = pd.DataFrame()
+    # stations = {'IA' : ['CBF', 'IKV', 'CWI', 'VTI'],
+    #             'MN' : ['DLH', 'JKJ', 'LYV', 'MSP', 'RST'], 
+    #             'WI' : ['MSN', 'MKE', 'EAU', 'GRB '],
+    #             'MI' : ['ANJ', 'GRR', 'LAN', 'DET', 'ARB'],
+    #             'IN' : ['EVV', 'FWA', 'GYY', 'IND', 'SBN', 'SPI'],
+    #             'IL' : ['BMI', 'CMI', 'ARR', 'PIA'],
+    #             'MO' : ['STL', 'COU', 'SGF', 'MKC'],
+    #             'MS' : ['HKS', 'MJD', 'TUP', 'MEI'],
+    #             'LA' : ['BTR', 'LFT', 'LCH', 'SHV', 'AEX'],
+    #             'TX' : ['LFK'] }
+
+    # stations_df = pd.DataFrame()
+    # stations_df = stations_df.append([write_station_df(sid, s) for sid in stations])
+    # stations_df.to_parquet('subset_stations.parquet')
 
 
