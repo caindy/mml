@@ -1,0 +1,63 @@
+from requests import Session
+import pandas as pd
+import numpy as np
+from io import StringIO
+
+from datetime import datetime
+from pytz import utc
+from request_session import get_session
+
+
+def get_station_ids(state : str, start_year: int, s : Session):
+    response = s.get(f'https://mesonet.agron.iastate.edu/geojson/network/{state}_ASOS.geojson')
+    if response.ok:
+        j = response.json()
+        sites = [site["properties"]  for site in j["features"]]
+        valid_sites = []
+        for site in sites:
+            try:
+                first_year = int(site["time_domain"][1:5])
+                if first_year <= start_year and site["time_domain"][6:9].lower() == "now":
+                    valid_sites.append(site["sid"])
+            except:
+                continue
+        print(f'Found {len(sites)} valid sites for {state}')
+        return valid_sites
+    else:
+        print(f'Request for {state} failed: {response.status_code} {response.reason}')
+
+def get_station_data(id: str, start: datetime, end: datetime, s : Session):
+    asos_url = 'https://mesonet.agron.iastate.edu/cgi-bin/request/asos.py'
+    data_query = 'data=tmpf&data=feel'
+    start = start.astimezone(tz=utc) 
+    end = end.astimezone(tz=utc)
+    date_query = f'year1={start.year}&month1={start.month}&day1={start.day}&year2={end.year}&month2={end.month}&day2={end.day}'
+    query = f'?{data_query}&tz=Etc/UTC&format=comma&latlon=yes&{date_query}'
+    url = f'{asos_url}{query}&station={id}'
+    response = s.get(url)
+    if response.ok:
+        csv = response.content.decode('utf-8')
+        df = pd.read_csv(StringIO(csv), skiprows = 5)
+        cnt, _ = df.size
+        print(f'Retrieved {cnt} observations for {id}')
+        if df.size > 0:
+            return df[['station', 'valid', 'tmpf', 'lat', 'lon', 'feel']]
+        else:
+            print(f'URL {url}')
+            print(csv)
+            return None
+    else:
+        print(f'Request for {id} in failed: {response.status_code} {response.reason}')
+
+def get_station_df(sid : str, start_date, end_date):
+    station = None
+    with get_session() as s:
+        station = get_station_data(sid, start_date, end_date, s)
+        if station is None:
+            return None
+
+
+    return station
+
+# states = ['ND', 'SD', 'MN', 'IA', 'AR', 'IN', 'IL', 'NE', 'KS', 'MO', 'WI', 'KY', 'LA', 'AR', 'MS']
+# additional states to consider: East TX,OH
