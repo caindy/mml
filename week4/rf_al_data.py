@@ -10,7 +10,7 @@ import zipfile
 
 # Downloads Daily Regional Forecast and Actual Load (xls)
 
-archive_cutoff = datetime(2018,12,31, tzinfo=timezone(timedelta(hours=-5)))
+archive_cutoff = datetime(2019,12,31, tzinfo=timezone(timedelta(hours=-5)))
 
 def get_archive_rf_al(start_date, output_dir, s : Session, end_date = archive_cutoff):
     month_starts = pd.date_range(start_date, end_date, freq='MS')
@@ -72,4 +72,4 @@ def get_daily_rf_al_df(start_date, end_date, output_dir):
 
     dfs = [get_df_for_path(p) for p in paths]
 
-    return all_data.append(dfs)
+    return all_data.concat(dfs)

@@ -10,6 +10,7 @@ ipykernel = "*"
 requests = "*"
 pyarrow = "*"
 fastparquet = "*"
+xlrd = "*"
 
 [dev-packages]
 
