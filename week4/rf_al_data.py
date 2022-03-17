@@ -62,7 +62,6 @@ def get_daily_rf_al_df(start_date, end_date, output_dir):
     td : timedelta = end_date - start_date
     paths = [f'{output_dir}/{get_file_name(start_date + timedelta(days =d))}' for d in range(1, td.days)]
     print(f'Fetching hourly Regional Forecasts and Actual Load for {len(paths)} days')
-    all_data = pd.DataFrame()
 
     with get_session() as s:
         if start_date < archive_cutoff:
@@ -72,4 +71,4 @@ def get_daily_rf_al_df(start_date, end_date, output_dir):
 
     dfs = [get_df_for_path(p) for p in paths]
 
-    return all_data.concat(dfs)
+    return pd.concat(dfs)

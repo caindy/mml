@@ -58,10 +58,8 @@ def cast_df(df, observation_hours):
     df = df.drop(columns=['feel'])
     idx = df.drop_duplicates('valid').set_index('valid').index.get_indexer(observation_hours, method='nearest')
     df = df.iloc[idx]
-    df = df.drop_duplicates('valid') 
     df['valid'] = df['valid'].dt.round(freq='H')
-    return df
-    #return df.set_index('valid')
+    return df.drop_duplicates('valid') 
 
 def get_station_df(sid : str, start_date, end_date):
     station = None
