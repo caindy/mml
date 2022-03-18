@@ -43,23 +43,11 @@ def get_station_csv(id: str, start: datetime, end: datetime, s : Session):
 def get_station_data(id: str, start: datetime, end: datetime, s : Session):
     if csv := get_station_csv(id, start, end, s):
         df = pd.read_csv(StringIO(csv), skiprows = 5)
-        print(f'Retrieved {df.size} observations for {id}')
         if df.size > 0:
             return df[['station', 'valid', 'tmpf', 'lat', 'lon', 'feel']]
         else:
             print(csv)
     return None
-
-def cast_df(df, observation_hours):
-    df = df[df['tmpf'] != 'M']
-    df['valid'] = pd.to_datetime(df['valid'], utc = True)
-    numeric_cols = ['tmpf', 'lat', 'lon']
-    df[numeric_cols] = df[numeric_cols].apply(pd.to_numeric, axis=1)
-    df = df.drop(columns=['feel'])
-    idx = df.drop_duplicates('valid').set_index('valid').index.get_indexer(observation_hours, method='nearest')
-    df = df.iloc[idx]
-    df['valid'] = df['valid'].dt.round(freq='H')
-    return df.drop_duplicates('valid') 
 
 def get_station_df(sid : str, start_date, end_date):
     station = None
@@ -68,6 +56,3 @@ def get_station_df(sid : str, start_date, end_date):
         if station is None:
             return None
     return station
-
-# states = ['ND', 'SD', 'MN', 'IA', 'AR', 'IN', 'IL', 'NE', 'KS', 'MO', 'WI', 'KY', 'LA', 'AR', 'MS']
-# additional states to consider: East TX,OH

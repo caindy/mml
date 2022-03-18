@@ -1,8 +1,8 @@
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from genericpath import isfile
 import pandas as pd
 from requests import Session
-import multiprocessing
+from multiprocessing import cpu_count
 from joblib import Parallel, delayed
 from request_session import get_session
 import zipfile
@@ -10,7 +10,9 @@ import zipfile
 
 # Downloads Daily Regional Forecast and Actual Load (xls)
 
-archive_cutoff = datetime(2019,12,31, tzinfo=timezone(timedelta(hours=-5)))
+archive_cutoff = datetime(date.today().year - 3, 12, 31, tzinfo=timezone(timedelta(hours=-5)))
+
+parallel = Parallel(n_jobs=cpu_count())
 
 def get_archive_rf_al(start_date, output_dir, s : Session, end_date = archive_cutoff):
     month_starts = pd.date_range(start_date, end_date, freq='MS')
@@ -28,20 +30,18 @@ def get_file_name(day):
     YYYYMMDD = day.strftime('%Y%m%d')
     return f'{YYYYMMDD}_rf_al.xls'
 
-def get_daily_rf_al(start_date, end_date, output_dir, s : Session):
-    paths = []
-    all_days = pd.date_range(start_date, end_date)
-    for day in all_days:
-        file_name = get_file_name(day)
-        output_path = f'{output_dir}/{file_name}'
-        if not isfile(output_path):
-            url = f'https://docs.misoenergy.org/marketreports/{file_name}'
-            print(f'Fetching {url}')
-            response = s.get(url)
-            with open(output_path, 'wb') as f:
-                f.write(response.content)
+def download_rf_al(output_dir, file_name, s):
+    output_path = f'{output_dir}/{file_name}'
+    if not isfile(output_path):
+        url = f'https://docs.misoenergy.org/marketreports/{file_name}'
+        response = s.get(url)
+        with open(output_path, 'wb') as f:
+            f.write(response.content)
+    return output_path
 
-        paths.append(output_path)
+def get_daily_rf_al(start_date, end_date, output_dir, s : Session):
+    all_days = pd.date_range(start_date, end_date)
+    return parallel(delayed(download_rf_al)(output_dir, get_file_name(day), s) for day in all_days)
 
 def get_df_for_path(p):
     df = pd.read_excel(p, skiprows=5) 
@@ -61,7 +61,6 @@ def get_df_for_path(p):
 def get_daily_rf_al_df(start_date, end_date, output_dir):
     td : timedelta = end_date - start_date
     paths = [f'{output_dir}/{get_file_name(start_date + timedelta(days =d))}' for d in range(1, td.days)]
-    print(f'Fetching hourly Regional Forecasts and Actual Load for {len(paths)} days')
 
     with get_session() as s:
         if start_date < archive_cutoff:
