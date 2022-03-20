@@ -12,6 +12,7 @@ pyarrow = "*"
 fastparquet = "*"
 xlrd = "*"
 matplotlib = "*"
+sklearn = "*"
 
 [dev-packages]
 
