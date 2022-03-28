@@ -13,6 +13,7 @@ fastparquet = "*"
 xlrd = "*"
 matplotlib = "*"
 sklearn = "*"
+statsmodels = "*"
 
 [dev-packages]
 
