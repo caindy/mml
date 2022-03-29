@@ -12,8 +12,9 @@ pyarrow = "*"
 fastparquet = "*"
 xlrd = "*"
 matplotlib = "*"
-sklearn = "*"
 statsmodels = "*"
+sklearn = "*"
+ipython = "*"
 
 [dev-packages]
 
