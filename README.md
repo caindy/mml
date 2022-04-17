@@ -1,2 +1,40 @@
-# mml
-Mathematics for Machine Learning
+# ML Models for Electric Load Forecasting
+
+# Electric Transmission System is Divided into Regions
+![Overview](https://www.ferc.gov/sites/default/files/2020-06/map-overview-electric.jpg)
+
+# MISO is Divided into Reliability Regions
+![MISO Regions](./images/miso_regions.PNG)
+<!-- ![MISO Reliability Regions](https://www.misoenergy.org/globalassets/about-miso/miso_reliability_map.jpg) -->
+
+
+## Reliability Regions are Divided into Local Resource Zones
+![Local Resource Zones](./images/lrz.PNG)
+
+
+# Project Goal: Medium-Term Load Forecast
+
+The MISO MTLF is updated every 15 minutes and forecasts hourly peak load for
+seven days. The MTLF values reported against actual load are fixed every
+24-hours at midnight. Therefore validation and testing of the model should
+exercise walk-forward techniques that predict daily-aligned 24-hour sequences.
+
+## Public Data
+
+For myriad reasons, the inputs to the MISO historical MTLF models are not
+available, but as a time series prediction model, it should minimally use
+up-to-date forecasts of weather data as well as current load data. This project
+shall only utilize publicly available data that is free to use.
+
+* [Historical Weather Data](https://mesonet.agron.iastate.edu/ASOS/): "The Iowa
+  Environmental Mesonet (IEM) collects environmental data from cooperating members
+  with observing networks. [...] The Automated Surface Observing System (ASOS) is
+  considered to be the flagship automated observing network."
+* [MISO Market Reports](https://www.misoenergy.org/markets-and-operations/real-time--market-data/market-reports)
+
+A particular gap in the available data is high quality weather forecasts.
+
+### Population Density Heuristic
+
+![Redditor US Population Density By County](https://i.redd.it/6azaarhnj8111.png)
+([source](https://www.reddit.com/r/dataisbeautiful/comments/8nkwii/population_density_of_the_us_by_county_updated_oc/))
