@@ -13,6 +13,7 @@ from urllib3.util.retry import Retry
 
 # Downloads Daily Regional Forecast and Actual Load (xls)
 
+# The MISO website keeps older data in a different location than more recent data
 archive_cutoff = datetime(date.today().year - 3, 12, 31, tzinfo=timezone(timedelta(hours=-5)))
 
 parallel = Parallel(n_jobs=cpu_count())
