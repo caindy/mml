@@ -84,17 +84,20 @@ def get_session(protocol = 'http://'):
     s.mount(protocol, HTTPAdapter(max_retries=retries))
     return s
 
-def get_station_ids(state : str, start_year: int, s : Session):
+def get_stations(state : str, start_year: int, s : Session):
     response = s.get(f'https://mesonet.agron.iastate.edu/geojson/network/{state}_ASOS.geojson')
     if response.ok:
         j = response.json()
-        sites = [site["properties"]  for site in j["features"]]
+        sites = [site["properties"] for site in j["features"]]
+        for (i, site) in enumerate(sites):
+            coords = j['features'][i]['geometry']['coordinates']
+            site['latlon'] = (coords[1], coords[0])
         valid_sites = []
         for site in sites:
             try:
                 first_year = int(site["time_domain"][1:5])
                 if first_year <= start_year and site["time_domain"][6:9].lower() == "now":
-                    valid_sites.append(site["sid"])
+                    valid_sites.append(site)
             except:
                 continue
         print(f'Found {len(sites)} valid sites for {state}')

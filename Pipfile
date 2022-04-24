@@ -15,6 +15,7 @@ matplotlib = "*"
 statsmodels = "*"
 sklearn = "*"
 ipython = "*"
+geopy = "*"
 
 [dev-packages]
 
