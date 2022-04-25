@@ -101,7 +101,7 @@ def get_stations(state : str, start_year: int, s : Session):
             except:
                 continue
         print(f'Found {len(sites)} valid sites for {state}')
-        return valid_sites
+        return pd.DataFrame(valid_sites)
     else:
         print(f'Request for {state} failed: {response.status_code} {response.reason}')
 
@@ -119,6 +119,7 @@ def get_station_csv(id: str, start: datetime, end: datetime, s : Session):
     else:
         return None
 
+
 def get_station_data(id: str, start: datetime, end: datetime, s : Session):
     if csv := get_station_csv(id, start, end, s):
         df = pd.read_csv(StringIO(csv), skiprows = 5)
@@ -135,3 +136,29 @@ def get_station_df(sid : str, start_date, end_date):
         if station is None:
             return None
     return station
+
+def align_df(w: pd.DataFrame, observation_hours):
+    df = w[w['tmpf'] != 'M'].copy()
+    df['valid'] = pd.to_datetime(df['valid'], utc=True)
+    numeric_cols = ['tmpf', 'lat', 'lon']
+    df[numeric_cols] = df[numeric_cols].apply(pd.to_numeric, axis=1)
+    df = df.drop(columns=['feel'])
+    idx = df.drop_duplicates('valid').set_index('valid').index.get_indexer(observation_hours, method='nearest')
+    df = df.iloc[idx]
+    return df.drop_duplicates('valid') 
+
+from geopy import distance
+def get_nearest_observation(sid: str, state: str, dt: datetime, s : Session):
+    stations = get_stations(state, 2015, s)
+    target = stations[stations['sid'] == sid].iloc[0]['latlon']
+    stations['distance'] = stations['latlon'].apply(lambda c: distance.distance(target, c).mi)
+    stations.sort_values(by=['distance'])
+    for station in stations.itertuples():
+        print(station)
+        start = dt - timedelta(minutes=20)
+        end = dt + timedelta(minutes=30)
+        other = get_station_data(station.sid, start, end, s)
+        other = align_df(other, [dt])
+        if other.shape[0] > 0:
+            return other.iloc[0]['tmpf']
+
