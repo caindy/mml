@@ -141,57 +141,38 @@ class ASOS():
         asos_url = 'https://mesonet.agron.iastate.edu/cgi-bin/request/asos.py'
         data_query = 'data=tmpf&data=feel'
         start = start.astimezone(tz=utc) 
-        end = end.astimezone(tz=utc)
+        end = end.astimezone(tz=utc) + timedelta(days=1)
         date_query = f'year1={start.year}&month1={start.month}&day1={start.day}&year2={end.year}&month2={end.month}&day2={end.day}'
         query = f'?{data_query}&tz=Etc/UTC&format=comma&latlon=yes&{date_query}'
         url = f'{asos_url}{query}&station={id}'
+        print(f'Fetching {url}')
         response = s.get(url)
         if response.ok:
             return response.content.decode('utf-8')
-        else:
-            return None
+        raise f'Request failed for {url}'
 
     def get_station_data(self, id: str, start: datetime, end: datetime) -> pd.DataFrame:
-        if csv := ASOS.get_station_csv(id, start, end, self.session):
-            df = pd.read_csv(StringIO(csv), skiprows = 5)
+        # we want extra data on ends for interpolation over lacunae
+        buffer = timedelta(days=1)
+        start_utc = start.astimezone(tz=utc) - buffer
+        end_utc = end.astimezone(tz=utc) + buffer
 
-            # API returns entire days, UTC-aligned
-            start = start.astimezone(tz=utc)
-            end = end.astimezone(tz=utc)
+        csv = ASOS.get_station_csv(id, start_utc, end_utc, self.session)
+        df = pd.read_csv(StringIO(csv), skiprows = 5)
+        if df.size < 1:
+            raise f'Error parsing {csv}'
 
-            if df.size > 0:
-                df['idx'] = pd.to_datetime(df['valid'], utc=True)
-                df['tmpf'] = pd.to_numeric(df['tmpf'], errors='coerce')
-                df = df.reindex(pd.date_range(start, end, freq='5min'))
-                df['tmpf'] = df['tmpf'].interpolate(method='spline', order=2)
-                df = df[['station', 'idx','tmpf']]
-                df['observing_station'] = df['station']
-                df['observation_time'] = df['idx']
-
-                df = df.drop_duplicates('idx').set_index('idx').dropna()
-                df = df[start:end]
-
-                # get as close to the top of the hour observation as possible
-                #hourly_idx = pd.date_range(start, end, freq='H')
-                #idx = df.drop_duplicates('idx').set_index('idx').index.get_indexer(hourly_idx, method='nearest', tolerance=timedelta(minutes=20))
-                #df = df.iloc[idx]
-
-                hourly_idx = pd.date_range(start, end, freq='H')
-
-                #closest = df.iloc[df.index.get_indexer(hourly_idx, method='backfill', tolerance=timedelta(minutes=60))].copy()
-                #closest['idx'] = closest['observation_time'].dt.round(freq='H') 
-                #closest = closest.drop_duplicates('idx').set_index('idx')
-
-                return df.reindex(hourly_idx, method='nearest', tolerance=timedelta(minutes=15))
-                #return closest.fillna(hourly_df)
-                #return hourly_df.fillna(closest)
-
-                # create NA for any missing hours in closest
-                left = pd.Series([id] * hourly_idx.shape[0], hourly_idx, name='station')
-                return pd.merge(left, closest, left_index=True, right_index=True, how='left')[:-6]
-            else:
-                raise f'Error parsing {csv}'
-        return None
+        df['idx'] = pd.to_datetime(df['valid'], utc=True)
+        df['observation_time'] = df['idx']
+        df['temp'] = pd.to_numeric(df['tmpf'], errors='coerce')
+        df = df.set_index('idx')
+        utc_hours = pd.date_range(start_utc, end_utc, freq='H')
+        df = df.reindex(utc_hours, method='nearest', tolerance=timedelta(minutes=15))
+        df['temp'] = df['temp'].interpolate(method='spline', order=3)
+        df = df[start.astimezone(tz=utc):end.astimezone(tz=utc)]
+        df['hour'] = pd.date_range(start, end, freq='H')
+        return df[['station', 'observation_time', 'temp', 'hour']].set_index('hour')
+        
 
     #@cache
     def get_station_df(self, sid : str, start_date, end_date):
