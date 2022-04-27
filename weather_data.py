@@ -14,7 +14,10 @@ from urllib3.util.retry import Retry
 # Downloads Daily Regional Forecast and Actual Load (xls)
 
 # The MISO website keeps older data in a different location than more recent data
-archive_cutoff = datetime(date.today().year - 3, 12, 31, tzinfo=timezone(timedelta(hours=-5)))
+tzet = timezone(timedelta(hours=-5))
+def prevailing_time(yyyy, mm, dd, hh):
+    return datetime(yyyy, mm, dd, hh, tzinfo=tzet)
+archive_cutoff = datetime(date.today().year - 3, 12, 31, tzinfo=tzet)
 
 parallel = Parallel(n_jobs=cpu_count())
 
@@ -76,89 +79,140 @@ def get_daily_rf_al_df(start_date, end_date, output_dir):
 
     return pd.concat(dfs)
 
-retries = Retry(total=5, backoff_factor=0.1,
-                status_forcelist=[500, 502, 503, 504])
-
-def get_session(protocol = 'http://'):
-    s = Session()
-    s.mount(protocol, HTTPAdapter(max_retries=retries))
-    return s
-
-def get_stations(state : str, start_year: int, s : Session):
-    response = s.get(f'https://mesonet.agron.iastate.edu/geojson/network/{state}_ASOS.geojson')
-    if response.ok:
-        j = response.json()
-        sites = [site["properties"] for site in j["features"]]
-        for (i, site) in enumerate(sites):
-            coords = j['features'][i]['geometry']['coordinates']
-            site['latlon'] = (coords[1], coords[0])
-        valid_sites = []
-        for site in sites:
-            try:
-                first_year = int(site["time_domain"][1:5])
-                if first_year <= start_year and site["time_domain"][6:9].lower() == "now":
-                    valid_sites.append(site)
-            except:
-                continue
-        print(f'Found {len(sites)} valid sites for {state}')
-        return pd.DataFrame(valid_sites)
-    else:
-        print(f'Request for {state} failed: {response.status_code} {response.reason}')
-
-def get_station_csv(id: str, start: datetime, end: datetime, s : Session):
-    asos_url = 'https://mesonet.agron.iastate.edu/cgi-bin/request/asos.py'
-    data_query = 'data=tmpf&data=feel'
-    start = start.astimezone(tz=utc) 
-    end = end.astimezone(tz=utc)
-    date_query = f'year1={start.year}&month1={start.month}&day1={start.day}&year2={end.year}&month2={end.month}&day2={end.day}'
-    query = f'?{data_query}&tz=Etc/UTC&format=comma&latlon=yes&{date_query}'
-    url = f'{asos_url}{query}&station={id}'
-    response = s.get(url)
-    if response.ok:
-        return response.content.decode('utf-8')
-    else:
-        return None
 
 
-def get_station_data(id: str, start: datetime, end: datetime, s : Session):
-    if csv := get_station_csv(id, start, end, s):
-        df = pd.read_csv(StringIO(csv), skiprows = 5)
-        if df.size > 0:
-            return df[['station', 'valid', 'tmpf', 'lat', 'lon', 'feel']]
-        else:
-            print(csv)
-    return None
-
-def get_station_df(sid : str, start_date, end_date):
-    station = None
-    with get_session() as s:
-        station = get_station_data(sid, start_date, end_date, s)
-        if station is None:
-            return None
-    return station
-
-def align_df(w: pd.DataFrame, observation_hours):
-    df = w[w['tmpf'] != 'M'].copy()
-    df['valid'] = pd.to_datetime(df['valid'], utc=True)
-    numeric_cols = ['tmpf', 'lat', 'lon']
-    df[numeric_cols] = df[numeric_cols].apply(pd.to_numeric, axis=1)
-    df = df.drop(columns=['feel'])
-    idx = df.drop_duplicates('valid').set_index('valid').index.get_indexer(observation_hours, method='nearest')
-    df = df.iloc[idx]
-    return df.drop_duplicates('valid') 
 
 from geopy import distance
-def get_nearest_observation(sid: str, state: str, dt: datetime, s : Session):
-    stations = get_stations(state, 2015, s)
-    target = stations[stations['sid'] == sid].iloc[0]['latlon']
-    stations['distance'] = stations['latlon'].apply(lambda c: distance.distance(target, c).mi)
-    stations.sort_values(by=['distance'])
-    for station in stations.itertuples():
-        print(station)
-        start = dt - timedelta(minutes=20)
-        end = dt + timedelta(minutes=30)
-        other = get_station_data(station.sid, start, end, s)
-        other = align_df(other, [dt])
-        if other.shape[0] > 0:
-            return other.iloc[0]['tmpf']
+from functools import cached_property, cache
 
+class ASOS():
+    """Pandas Adapter for the Iowa State ASOS Network downloads JSON API"""
+    def __init__(self, first_year = 2016) -> None:
+        self.first_year = first_year or 2016
+
+    miso_states = ['AR', 'IL', 'IN', 'IA', 'KY', 'LA', 'MI', 'MN',
+                   'MS', 'MO', 'MT', 'ND', 'SD', 'TX', 'WI']
+
+    __retries = Retry(total=5, backoff_factor=0.1,
+                    status_forcelist=[500, 502, 503, 504])
+
+    @cached_property
+    def session(self):
+        s = Session()
+        s.mount('https://', HTTPAdapter(max_retries=ASOS.__retries))
+        return s
+
+    @cached_property
+    def stations(self):
+        return pd.concat([ASOS.__get_stations(state, self.first_year, self.session)
+                            for state in ASOS.miso_states])
+
+    @staticmethod
+    def __get_stations(state, start_year, s : Session):
+        response = s.get(f'https://mesonet.agron.iastate.edu/geojson/network/{state}_ASOS.geojson')
+        if response.ok:
+            j = response.json()
+            sites = [site["properties"] for site in j["features"]]
+            for (i, site) in enumerate(sites):
+                coords = j['features'][i]['geometry']['coordinates']
+                site['latlon'] = (coords[1], coords[0])
+            valid_sites = []
+            for site in sites:
+                try:
+                    first_year = int(site["time_domain"][1:5])
+                    if first_year <= start_year and site["time_domain"][6:9].lower() == "now":
+                        valid_sites.append(site)
+                except:
+                    continue
+            return pd.DataFrame(valid_sites)
+        else:
+            raise f'Request for {state} failed: {response.status_code} {response.reason}'
+
+    def get_nearest_stations(self, sid: str, radius_miles = 20):
+        stations = self.stations.copy()
+        target = stations[stations['sid'] == sid].iloc[0]['latlon']
+        stations['distance'] = stations['latlon'].apply(lambda c: distance.distance(target, c).mi)
+        stations = stations[stations['distance'] < radius_miles]
+        stations.sort_values(by=['distance'], inplace=True)
+        return stations[1:]['sid'].array
+
+    @staticmethod
+    def get_station_csv(id: str, start: datetime, end: datetime, s : Session):
+        asos_url = 'https://mesonet.agron.iastate.edu/cgi-bin/request/asos.py'
+        data_query = 'data=tmpf&data=feel'
+        start = start.astimezone(tz=utc) 
+        end = end.astimezone(tz=utc)
+        date_query = f'year1={start.year}&month1={start.month}&day1={start.day}&year2={end.year}&month2={end.month}&day2={end.day}'
+        query = f'?{data_query}&tz=Etc/UTC&format=comma&latlon=yes&{date_query}'
+        url = f'{asos_url}{query}&station={id}'
+        response = s.get(url)
+        if response.ok:
+            return response.content.decode('utf-8')
+        else:
+            return None
+
+    def get_station_data(self, id: str, start: datetime, end: datetime) -> pd.DataFrame:
+        if csv := ASOS.get_station_csv(id, start, end, self.session):
+            df = pd.read_csv(StringIO(csv), skiprows = 5)
+
+            # API returns entire days, UTC-aligned
+            start = start.astimezone(tz=utc)
+            end = end.astimezone(tz=utc)
+
+            if df.size > 0:
+                df['idx'] = pd.to_datetime(df['valid'], utc=True)
+                df['tmpf'] = pd.to_numeric(df['tmpf'], errors='coerce')
+                df = df.reindex(pd.date_range(start, end, freq='5min'))
+                df['tmpf'] = df['tmpf'].interpolate(method='spline', order=2)
+                df = df[['station', 'idx','tmpf']]
+                df['observing_station'] = df['station']
+                df['observation_time'] = df['idx']
+
+                df = df.drop_duplicates('idx').set_index('idx').dropna()
+                df = df[start:end]
+
+                # get as close to the top of the hour observation as possible
+                #hourly_idx = pd.date_range(start, end, freq='H')
+                #idx = df.drop_duplicates('idx').set_index('idx').index.get_indexer(hourly_idx, method='nearest', tolerance=timedelta(minutes=20))
+                #df = df.iloc[idx]
+
+                hourly_idx = pd.date_range(start, end, freq='H')
+
+                #closest = df.iloc[df.index.get_indexer(hourly_idx, method='backfill', tolerance=timedelta(minutes=60))].copy()
+                #closest['idx'] = closest['observation_time'].dt.round(freq='H') 
+                #closest = closest.drop_duplicates('idx').set_index('idx')
+
+                return df.reindex(hourly_idx, method='nearest', tolerance=timedelta(minutes=15))
+                #return closest.fillna(hourly_df)
+                #return hourly_df.fillna(closest)
+
+                # create NA for any missing hours in closest
+                left = pd.Series([id] * hourly_idx.shape[0], hourly_idx, name='station')
+                return pd.merge(left, closest, left_index=True, right_index=True, how='left')[:-6]
+            else:
+                raise f'Error parsing {csv}'
+        return None
+
+    #@cache
+    def get_station_df(self, sid : str, start_date, end_date):
+            df = self.get_station_data(sid, start_date, end_date)
+            return df
+            nearby = iter(self.get_nearest_stations(sid))
+            for nearby in self.get_nearest_stations(sid):
+                print(f'trying {nearby}')
+                other = self.get_station_data(nearby, start_date, end_date)
+                df = df.fillna(other)
+                if not any(pd.isna(df['tmpf'])):
+                    return df
+            return df
+    
+
+    def align(w: pd.DataFrame, observation_hours):
+        df = w[w['tmpf'] != 'M'].copy()
+        #df['valid'] = pd.to_datetime(df['valid'], utc=True)
+        #numeric_cols = ['tmpf', 'lat', 'lon']
+        #df[numeric_cols] = df[numeric_cols].apply(pd.to_numeric, axis=1)
+        df = df.drop(columns=['feel'])
+        idx = df.drop_duplicates('valid').set_index('valid').index.get_indexer(observation_hours, method='nearest')
+        df = df.iloc[idx]
+        return df.drop_duplicates('valid')
