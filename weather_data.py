@@ -1,116 +1,22 @@
-import weakref
-import zipfile
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta
+from functools import cached_property
 from io import StringIO
-from multiprocessing import cpu_count
-
 import pandas as pd
-from genericpath import isfile
-from joblib import Parallel, delayed
 from pytz import utc
-from requests import Session
-from requests.sessions import HTTPAdapter
-from urllib3.util.retry import Retry
+from util import WebClient
+from MISO_data import miso_states
 
-# Downloads Daily Regional Forecast and Actual Load (xls)
-
-# The MISO website keeps older data in a different location than more recent data
-tzet = timezone(timedelta(hours=-5))
-def prevailing_time(yyyy, mm, dd, hh):
-    return datetime(yyyy, mm, dd, hh, tzinfo=tzet)
-archive_cutoff = datetime(date.today().year - 3, 12, 31, tzinfo=tzet)
-
-parallel = Parallel(n_jobs=cpu_count())
-
-def get_archive_rf_al(start_date, output_dir, s : Session, end_date = archive_cutoff):
-    month_starts = pd.date_range(start_date, end_date, freq='MS')
-    for ms in month_starts:
-        YYYYMM = ms.strftime('%Y%m')
-        url = f'https://docs.misoenergy.org/marketreports/{YYYYMM}_rf_al_xls.zip'
-        response = s.get(url)
-        zip_file = f'{output_dir}/{YYYYMM}.zip'
-        with open(zip_file, 'wb') as f:
-            f.write(response.content)
-        with zipfile.ZipFile(zip_file, 'r') as zip_ref:
-            zip_ref.extractall(output_dir)
-
-def get_file_name(day):
-    YYYYMMDD = day.strftime('%Y%m%d')
-    return f'{YYYYMMDD}_rf_al.xls'
-
-def download_rf_al(output_dir, file_name, s):
-    output_path = f'{output_dir}/{file_name}'
-    if not isfile(output_path):
-        url = f'https://docs.misoenergy.org/marketreports/{file_name}'
-        response = s.get(url)
-        with open(output_path, 'wb') as f:
-            f.write(response.content)
-    return output_path
-
-def get_daily_rf_al(start_date, end_date, output_dir, s : Session):
-    all_days = pd.date_range(start_date, end_date)
-    return parallel(delayed(download_rf_al)(output_dir, get_file_name(day), s) for day in all_days)
-
-def get_df_for_path(p):
-    df = pd.read_excel(p, skiprows=5) 
-    df = df[1:25]
-    new_miso_cols = ['North MTLF (MWh)', 'North ActualLoad (MWh)',
-                    'South MTLF (MWh)', 'South ActualLoad (MWh)',
-                    'MISO MTLF (MWh)',
-                    'MISO ActualLoad (MWh)']
-    numeric_cols = ['HourEnding', 'Central MTLF (MWh)', 'Central ActualLoad (MWh)'] + new_miso_cols
-                    
-    df[numeric_cols] = df[numeric_cols].apply(pd.to_numeric)
-    df[['Market Day']] = df[['Market Day']].apply(pd.to_datetime)
-    df = df[['Market Day'] + numeric_cols]
-    assert df.iloc[23].HourEnding == 24
-    return df
-
-def get_daily_rf_al_df(start_date, end_date, output_dir):
-    td : timedelta = end_date - start_date
-    paths = [f'{output_dir}/{get_file_name(start_date + timedelta(days =d))}' for d in range(1, td.days)]
-
-    with get_session() as s:
-        if start_date < archive_cutoff:
-            get_archive_rf_al(start_date, output_dir, s)
-        begin = start_date if start_date <= archive_cutoff else archive_cutoff + timedelta(days=1)
-        get_daily_rf_al(begin, end_date, output_dir, s)
-
-    dfs = [get_df_for_path(p) for p in paths]
-
-    return pd.concat(dfs)
-
-
-from functools import cached_property, cache
-@cache
-def get_cached(url:str, s):
-    print(f'Fetching {url}')
-    return s().get(url)
-
-class ASOS():
+class ASOS(WebClient):
     """Pandas Adapter for the Iowa State ASOS Network downloads JSON API"""
     def __init__(self, first_year = 2016) -> None:
         self.first_year = first_year or 2016
 
-    miso_states = ['AR', 'IL', 'IN', 'IA', 'KY', 'LA', 'MI', 'MN',
-                   'MS', 'MO', 'MT', 'ND', 'SD', 'TX', 'WI']
-
-    __retries = Retry(total=5, backoff_factor=0.1,
-                    status_forcelist=[500, 502, 503, 504])
-
-    @cached_property
-    def session(self):
-        s = Session()
-        s.mount('https://', HTTPAdapter(max_retries=ASOS.__retries))
-        return s
-
     @cached_property
     def stations(self):
-        return pd.concat([ASOS.__get_stations(state, self.first_year, self.session)
-                            for state in ASOS.miso_states])
+        return pd.concat([self.__get_stations(state, self.first_year)
+                            for state in miso_states])
 
-
-    def get_station_csv(self, id: str, start: datetime, end: datetime):
+    def __get_station_csv(self, id: str, start: datetime, end: datetime):
         asos_url = 'https://mesonet.agron.iastate.edu/cgi-bin/request/asos.py'
         data_query = 'data=tmpf&data=feel'
         start = start.astimezone(tz=utc) 
@@ -118,7 +24,7 @@ class ASOS():
         date_query = f'year1={start.year}&month1={start.month}&day1={start.day}&year2={end.year}&month2={end.month}&day2={end.day}'
         query = f'?{data_query}&tz=Etc/UTC&format=comma&latlon=yes&{date_query}'
         url = f'{asos_url}{query}&station={id}'
-        response = get_cached(url, weakref.ref(self.session))
+        response = self.get_cached(url)
         if response.ok:
             return response.content.decode('utf-8')
         raise f'Request failed for {url}'
@@ -131,7 +37,8 @@ class ASOS():
         start_utc = start.astimezone(tz=utc) - buffer
         end_utc = end.astimezone(tz=utc) + buffer
 
-        csv = self.get_station_csv(id, start_utc, end_utc)
+        # the CSV returned has a 5 line header
+        csv = self.__get_station_csv(id, start_utc, end_utc)
         df = pd.read_csv(StringIO(csv), skiprows = 5)
         if df.size < 1:
             raise f'Error parsing {csv}'
@@ -188,7 +95,7 @@ class ASOS():
                 return stations[1:]['sid'].array
         """
         url = f'https://mesonet.agron.iastate.edu/geojson/network/{state}_ASOS.geojson'
-        response = self.session.get(url)
+        response = self.get_cached(url)
         if response.ok:
             j = response.json()
             sites = [site["properties"] for site in j["features"]]
