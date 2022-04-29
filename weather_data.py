@@ -4,7 +4,7 @@ from io import StringIO
 import pandas as pd
 from pytz import utc
 from util import WebClient
-from MISO_data import miso_states
+from MISO import miso_states
 
 class ASOS(WebClient):
     """Pandas Adapter for the Iowa State ASOS Network downloads JSON API"""

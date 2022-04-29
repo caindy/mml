@@ -21,3 +21,6 @@ class WebClient():
 
     def get_cached(self, url):
         return get_cached(url, weakref.ref(self.session))
+    
+    def get(self, url):
+        return self.session.get(url)
