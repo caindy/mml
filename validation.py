@@ -1,6 +1,6 @@
 import numpy as np
 from sklearn.metrics import mean_absolute_error, max_error
-from MISO_data import prior_load_colname, WEATHER_STATIONS
+from MISO import prior_load_colname, WEATHER_STATIONS
 
 def mtlf_predict_window(model, X_test, forecasts = None):
     window_size = X_test.shape[0]
