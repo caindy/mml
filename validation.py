@@ -68,7 +68,7 @@ from joblib import Parallel, delayed
 from multiprocessing import cpu_count
 parallel = Parallel(n_jobs=cpu_count())
 
-def walkforward(model, all_X, all_y, start_hour, end_hour):
+def walkforward(model, all_X, all_y, start_hour, end_hour, next_hour):
     stride = 24 # hours
     d = (end_hour - start_hour) + timedelta(hours=1) 
     total_hours = d.days * 24 + d.seconds // 3600
@@ -91,16 +91,32 @@ def walkforward(model, all_X, all_y, start_hour, end_hour):
 
         #print(f'Predicting {next_Xpredict.index.to_series().iloc[0]}')
         #print(f'Predicting {next_Xpredict.index.to_series().iloc[-1]}')
-        prediction = model.fit(next_Xtrain, next_ytrain).predict(next_Xpredict)
+
+        prediction = hourly_prediction(model.fit(next_Xtrain, next_ytrain), next_Xpredict, next_hour)
         error = Error(y=next_y, yhat=prediction)
         return d, prediction, error 
 
-    results = parallel(delayed(step)(d) for d in range(0, strides))
+    #results = parallel(delayed(step)(d) for d in range(0, strides))
+    results = [step(d) for d in range(0, strides)]
     results = sorted(results, key=lambda r: r[0])
     predictions = [r[1] for r in results]
     errors = [r[2] for r in results]
     
     return (predictions, errors)
+
+# we cannot let the actuals leak into the validation set
+def hourly_prediction(fitted_model, Xpredict, next_hour):
+    yhats = []
+    # HACK: assume the first hour has the current hour STLF 
+    # and short term weather forecast instead of actual
+    # TODO: implement some noise to simulate these
+    x = Xpredict.iloc[0:1]
+    yhats.append(fitted_model.predict(x)[0])
+    for i in range(1, Xpredict.shape[0]):
+        yhat = yhats[i - 1]
+        x = next_hour(Xpredict.iloc[i:i+1], x, yhat)
+        yhats.append(fitted_model.predict(x)[0])
+    return yhats
 
 from datetime import timedelta
 @dataclass

@@ -19,6 +19,8 @@ seven days. The MTLF values reported against actual load are fixed every
 24-hours at midnight. Therefore validation and testing of the model should
 exercise walk-forward techniques that predict daily-aligned 24-hour sequences.
 
+<!-- What is it we're trying to achieve https://misortwd.azurewebsites.net/MISORTWDDataBroker/DataBrokerServices.asmx?messageType=gettotalload&returnType=csv -->
+
 ## Public Data
 
 For myriad reasons, the inputs to the MISO historical MTLF models are not
@@ -33,6 +35,8 @@ shall only utilize publicly available data that is free to use.
 * [MISO Market Reports](https://www.misoenergy.org/markets-and-operations/real-time--market-data/market-reports)
 
 A particular gap in the available data is high quality weather forecasts.
+
+
 
 ### Population Density Heuristic
 
