@@ -1,5 +1,4 @@
-from cProfile import label
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import List
 import numpy as np
 from sklearn.metrics import mean_absolute_error, max_error
@@ -102,3 +101,44 @@ def walkforward(model, all_X, all_y, start_hour, end_hour):
     errors = [r[2] for r in results]
     
     return (predictions, errors)
+
+from datetime import timedelta
+@dataclass
+class DataSet():
+    mtlf: str
+    actual: str
+    features: list[str]
+    test_start: datetime
+    test_end: datetime
+    validation_start: datetime
+    validation_end: datetime
+    train_start: datetime
+    train_end: datetime
+    
+    data: InitVar[pd.DataFrame] = None
+    validation_data: InitVar[pd.DataFrame] = None
+    test_data: InitVar[pd.DataFrame] = None
+
+    def __init__(self, path, mtlf, actual, features = None) -> None:
+        self.data = pd.read_parquet(path)
+        self.mtlf = mtlf
+        self.actual = actual
+        if not features:
+            self.features = self.data.drop([mtlf, actual], axis=1).columns.to_list()
+        else:
+            self.features = features
+
+        hours = self.data.index.to_series()
+        first_hour = hours.iloc[0]
+        last_hour = hours.iloc[-1]
+
+        self.test_start = last_hour - timedelta(days=364, hours=23)
+        self.test_end = last_hour
+        self.validation_start = self.test_start - timedelta(days=365)
+        self.validation_end = self.test_start - timedelta(hours=1)
+        self.train_start = first_hour
+        self.train_end = self.validation_start - timedelta(hours=1)
+
+        self.validation_data = self.data[self.validation_start:self.validation_end]
+        self.test_data = self.data[self.test_start:self.test_end]
+        self.train_data = self.data[self.train_start:self.train_end]
