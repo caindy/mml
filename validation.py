@@ -92,12 +92,13 @@ def walkforward(model, all_X, all_y, start_hour, end_hour, next_hour, active_fea
         #print(f'Predicting {next_Xpredict.index.to_series().iloc[0]}')
         #print(f'Predicting {next_Xpredict.index.to_series().iloc[-1]}')
 
-        prediction = hourly_prediction(model.fit(next_Xtrain[active_features], next_ytrain), next_Xpredict, next_hour, active_features)
+        fitted_model = model.fit(next_Xtrain[active_features], next_ytrain)
+        prediction = hourly_prediction(fitted_model, next_Xpredict, next_hour, active_features)
         error = Error(y=next_y, yhat=prediction)
         return d, prediction, error 
 
-    #results = parallel(delayed(step)(d) for d in range(0, strides))
-    results = [step(d) for d in range(0, strides)]
+    results = parallel(delayed(step)(d) for d in range(0, strides))
+    #results = [step(d) for d in range(0, strides)]
     results = sorted(results, key=lambda r: r[0])
     predictions = [r[1] for r in results]
     errors = [r[2] for r in results]
@@ -118,43 +119,3 @@ def hourly_prediction(fitted_model, Xpredict, next_hour, active_features):
         yhats.append(fitted_model.predict(x[active_features])[0])
     return yhats
 
-from datetime import timedelta
-@dataclass
-class DataSet():
-    mtlf: str
-    actual: str
-    features: list[str]
-    test_start: datetime
-    test_end: datetime
-    validation_start: datetime
-    validation_end: datetime
-    train_start: datetime
-    train_end: datetime
-    
-    data: InitVar[pd.DataFrame] = None
-    validation_data: InitVar[pd.DataFrame] = None
-    test_data: InitVar[pd.DataFrame] = None
-
-    def __init__(self, path, mtlf, actual, features = None) -> None:
-        self.data = pd.read_parquet(path)
-        self.mtlf = mtlf
-        self.actual = actual
-        if not features:
-            self.features = self.data.drop([mtlf, actual], axis=1).columns.to_list()
-        else:
-            self.features = features
-
-        hours = self.data.index.to_series()
-        first_hour = hours.iloc[0]
-        last_hour = hours.iloc[-1]
-
-        self.test_start = last_hour - timedelta(days=364, hours=23)
-        self.test_end = last_hour
-        self.validation_start = self.test_start - timedelta(days=365)
-        self.validation_end = self.test_start - timedelta(hours=1)
-        self.train_start = first_hour
-        self.train_end = self.validation_start - timedelta(hours=1)
-
-        self.validation_data = self.data[self.validation_start:self.validation_end]
-        self.test_data = self.data[self.test_start:self.test_end]
-        self.train_data = self.data[self.train_start:self.train_end]
