@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from typing import List
 import numpy as np
 from sklearn.metrics import mean_absolute_error, max_error
-from MISO import prior_load_colname, WEATHER_STATIONS
+from MISO import prior_load_colname #, WEATHER_STATIONS
 
 def mtlf_predict_window(model, X_test, forecasts = None):
     window_size = X_test.shape[0]
@@ -36,11 +36,14 @@ def mtlf_predict(model, X):
         yhat[stop-1] = mtlf_predict_window(model, X[start:stop].copy())
     return yhat
 
+"""
+
 def simulate_weather_forecast(data, stddev = 2.25):
     df = data.copy()
     forecast_error = np.random.normal(0, 2.25, df[WEATHER_STATIONS].shape)
     data_test_forecast_error[WEATHER_STATIONS] = df[WEATHER_STATIONS] + forecast_error
     data_test_forecast_error = data_test_forecast_error.drop(target_name, axis=1)
+"""
 
 def show_error(y, yhat):
     MAE = mean_absolute_error(y, yhat)

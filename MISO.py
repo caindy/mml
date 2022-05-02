@@ -22,8 +22,8 @@ import pandas as pd
 MISO_PREDICTION_COLUMN_NAME : str = 'MISO MTLF (MWh)'
 TARGET_NAME : str = 'MISO ActualLoad (MWh)'
 
-__data__ = pd.read_parquet('./archive/linear_model/data/harmonized_data.parquet')
-WEATHER_STATIONS = __data__.columns[0:38]
+#__data__ = pd.read_parquet('./archive/linear_model/data/harmonized_data.parquet')
+#WEATHER_STATIONS = __data__.columns[0:38]
 
 def prior_load_colname(i : int):
     return f"Actual Load {i} hours prior"

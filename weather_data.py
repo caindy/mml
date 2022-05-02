@@ -27,7 +27,7 @@ class ASOS(WebClient):
         response = self.get_cached(url)
         if response.ok:
             return response.content.decode('utf-8')
-        raise f'Request failed for {url}'
+        raise Exception(f'Request failed for {url}')
 
     def get_hourly_observations(self, id: str, start: datetime, end: datetime) -> pd.DataFrame:
         # we require extra data on ends for interpolation
@@ -41,7 +41,7 @@ class ASOS(WebClient):
         csv = self.__get_station_csv(id, start_utc, end_utc)
         df = pd.read_csv(StringIO(csv), skiprows = 5)
         if df.size < 1:
-            raise f'Error parsing {csv}'
+            raise Exception(f'Error parsing {csv}')
 
         # we will make this an hourly dataset through interpolation,
         # but we want to preserve the original observation time
@@ -112,4 +112,4 @@ class ASOS(WebClient):
                     continue
             return pd.DataFrame(valid_sites)
         else:
-            raise f'Request for {state} failed: {response.status_code} {response.reason}'
+            raise Exception(f'Request for {state} failed: {response.status_code} {response.reason}')
