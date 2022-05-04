@@ -16,6 +16,7 @@ statsmodels = "*"
 sklearn = "*"
 ipython = "*"
 geopy = "*"
+tensorflow = "*"
 
 [dev-packages]
 
