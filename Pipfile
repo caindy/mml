@@ -17,6 +17,7 @@ sklearn = "*"
 ipython = "*"
 geopy = "*"
 tensorflow = "*"
+seaborn = "*"
 
 [dev-packages]
 notebook = "*"

@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "40e916bcc0039861ae929270a50142233c4106c04714471b6603c7ade4ab2d98"
+            "sha256": "1a94676c65fccc9a94537299323448b0964826c36b25b1dd98d2f80fe5674a00"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -529,11 +529,11 @@
         },
         "markdown": {
             "hashes": [
-                "sha256:76df8ae32294ec39dcf89340382882dfa12975f87f45c3ed1ecdb1e8cefc7006",
-                "sha256:9923332318f843411e9932237530df53162e29dc7a4e2b91e35764583c46c9a3"
+                "sha256:cbb516f16218e643d8e0a95b309f77eb118cb138d39a4f27851e6a63581db874",
+                "sha256:f5da449a6e1c989a4cea2631aa8ee67caa5a2ef855d551c88f9e309f4634c621"
             ],
             "markers": "python_version >= '3.6'",
-            "version": "==3.3.6"
+            "version": "==3.3.7"
         },
         "matplotlib": {
             "hashes": [
@@ -1084,6 +1084,14 @@
             ],
             "markers": "python_version < '3.11' and python_version >= '3.8'",
             "version": "==1.8.0"
+        },
+        "seaborn": {
+            "hashes": [
+                "sha256:85a6baa9b55f81a0623abddc4a26b334653ff4c6b18c418361de19dbba0ef283",
+                "sha256:cf45e9286d40826864be0e3c066f98536982baf701a7caa386511792d61ff4f6"
+            ],
+            "index": "pypi",
+            "version": "==0.11.2"
         },
         "setuptools": {
             "hashes": [
@@ -1647,11 +1655,11 @@
         },
         "jsonschema": {
             "hashes": [
-                "sha256:636694eb41b3535ed608fe04129f26542b59ed99808b4f688aa32dcf55317a83",
-                "sha256:77281a1f71684953ee8b3d488371b162419767973789272434bbc3f29d9c8823"
+                "sha256:71b5e39324422543546572954ce71c67728922c104902cb7ce252e522235b33f",
+                "sha256:7c6d882619340c3347a1bf7315e147e6d3dae439033ae6383d6acb908c101dfc"
             ],
             "markers": "python_version >= '3.7'",
-            "version": "==4.4.0"
+            "version": "==4.5.1"
         },
         "jupyter-client": {
             "hashes": [
