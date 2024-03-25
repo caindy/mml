@@ -1,17 +1,3 @@
-# ML Models for Electric Load Forecasting
-
-# Electric Transmission System is Divided into Regions
-![Overview](https://www.ferc.gov/sites/default/files/2020-06/map-overview-electric.jpg)
-
-# MISO is Divided into Reliability Regions
-![MISO Regions](./images/miso_regions.PNG)
-<!-- ![MISO Reliability Regions](https://www.misoenergy.org/globalassets/about-miso/miso_reliability_map.jpg) -->
-
-
-## Reliability Regions are Divided into Local Resource Zones
-![Local Resource Zones](./images/lrz.PNG)
-
-
 # Project Goal: Medium-Term Load Forecast
 
 The MISO MTLF is updated every 15 minutes and forecasts hourly peak load for
